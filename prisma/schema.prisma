@@ -1,0 +1,1003 @@
+// Couple Health App — data model
+// Source-of-truth logs are kept strictly separate from derived scores/streaks.
+// All instants are stored in UTC; `localDate` is the user's own calendar day,
+// computed from their timezone at write time so daily rollups and streaks
+// respect timezone boundaries.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum CoupleStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum GoalOwnerType {
+  PERSONAL
+  COUPLE
+}
+
+enum GoalType {
+  INDIVIDUAL
+  SHARED
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum GoalCategory {
+  WATER
+  NUTRITION
+  FITNESS
+  ACTIVITY
+  HABIT
+  WELLNESS
+  RELATIONSHIP
+  DATE_ADVENTURE
+  QUALITY_TIME
+  CUSTOM
+}
+
+enum ProgressMode {
+  MANUAL
+  AUTO_TRACKED
+  CHECK_IN
+}
+
+enum ParticipantRole {
+  OWNER
+  PARTNER
+}
+
+enum AcceptanceStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  OTHER
+}
+
+enum MoodType {
+  VERY_SAD
+  SAD
+  LOW
+  NEUTRAL
+  GOOD
+  HAPPY
+  VERY_HAPPY
+}
+
+enum ShareMode {
+  PRIVATE
+  STATUS_ONLY
+  STATUS_AND_NOTE
+}
+
+enum ShareCategory {
+  HEALTH_SCORE
+  WATER_TARGET
+  WATER_DETAIL
+  MEALS
+  WORKOUTS
+  HABITS
+  MOOD_STATUS
+  MOOD_NOTE
+  STREAKS
+}
+
+enum ShareDetailLevel {
+  NONE
+  STATUS
+  SUMMARY
+  DETAIL
+}
+
+enum ChallengeStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum CheckInStatus {
+  PENDING
+  DONE
+  SKIPPED
+}
+
+enum PromiseStatus {
+  PROPOSED
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum MessageType {
+  NOTE
+  ENCOURAGEMENT
+  THINKING_OF_YOU
+  CELEBRATION
+  REMINDER
+}
+
+enum LetterStatus {
+  SEALED
+  OPENED
+  ARCHIVED
+}
+
+enum NotificationCategory {
+  HEALTH_REMINDERS
+  COUPLE_MESSAGES
+  GOAL_REMINDERS
+  HABIT_REMINDERS
+  CELEBRATIONS
+  DAILY_CHECK_IN
+}
+
+enum NotificationType {
+  CUSTOM_MESSAGE
+  HEALTH_REMINDER
+  GOAL_REMINDER
+  HABIT_REMINDER
+  WATER_REMINDER
+  MEAL_REMINDER
+  WORKOUT_REMINDER
+  DAILY_CHECK_IN
+  COUPLE_UPDATE
+  GOAL_COMPLETED
+  OPEN_WHEN
+  CELEBRATION
+}
+
+enum ScheduledStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  FAILED
+  EXPIRED
+}
+
+enum CelebrationKind {
+  GOAL_COMPLETED
+  MILESTONE_REACHED
+  CHALLENGE_WON
+  STREAK_MILESTONE
+  PROMISE_KEPT
+}
+
+enum InsightType {
+  POSITIVE_TREND
+  GENTLE_NUDGE
+  PATTERN
+  GOAL_PROGRESS
+}
+
+enum ThemePreference {
+  HONEY
+  BLUSH
+  LILAC
+  SAGE
+  SKY
+  CLAY
+}
+
+enum ModePreference {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
+// ─── Users ──────────────────────────────────────────────────────────────────
+
+model User {
+  id           String  @id @default(uuid()) @db.Uuid
+  email        String  @unique
+  passwordHash String
+  displayName  String
+  avatarUrl    String?
+  timezone     String  @default("UTC")
+
+  themePreference ThemePreference @default(BLUSH)
+  modePreference  ModePreference  @default(SYSTEM)
+
+  onboardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  healthProfile HealthProfile?
+
+  couplesAsA CoupleRelationship[] @relation("CoupleUserA")
+  couplesAsB CoupleRelationship[] @relation("CoupleUserB")
+  sentInvites CoupleInvite[]      @relation("InviteSender")
+
+  habits            Habit[]
+  habitCompletions  HabitCompletion[]
+  waterEntries      WaterEntry[]
+  mealEntries       MealEntry[]
+  activityEntries   ActivityEntry[]
+  moodEntries       MoodEntry[]
+  journalEntries    JournalEntry[]
+
+  createdGoals       Goal[]             @relation("GoalCreator")
+  goalParticipations GoalParticipant[]
+  goalContributions  GoalContribution[]
+
+  dailyCheckIns   DailyCheckIn[]
+  createdPromises Promise[]        @relation("PromiseCreator")
+
+  sentMessages     Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageRecipient")
+  reactions        MessageReaction[]
+
+  sentLetters     OpenWhenLetter[] @relation("LetterSender")
+  receivedLetters OpenWhenLetter[] @relation("LetterRecipient")
+
+  memories      Memory[]
+  dailyScores   DailyScore[]
+  aiInsights    AiInsight[]
+  celebrations  CelebrationSeen[]
+
+  sharingPreferences      SharingPreference[]
+  notificationPreferences NotificationPreference[]
+  deviceSubscriptions     DeviceSubscription[]
+  scheduledNotifications  ScheduledNotification[]
+  notificationDeliveries  NotificationDelivery[]
+  auditEvents             AuditEvent[]
+
+  @@index([email])
+  @@map("users")
+}
+
+/// Personal daily targets that shape the health score. Private to the owner.
+model HealthProfile {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  dailyWaterGoalMl    Int @default(2000)
+  dailyMealGoal       Int @default(3)
+  weeklyWorkoutGoal   Int @default(4)
+  dailyActivityGoal   Int @default(30) // minutes
+  glassSizeMl         Int @default(250)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("health_profiles")
+}
+
+// ─── Couple ─────────────────────────────────────────────────────────────────
+
+model CoupleRelationship {
+  id      String       @id @default(uuid()) @db.Uuid
+  userAId String       @db.Uuid
+  userBId String?      @db.Uuid
+  status  CoupleStatus @default(PENDING)
+
+  title       String?
+  anniversary DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  activatedAt DateTime?
+  endedAt     DateTime?
+
+  userA User  @relation("CoupleUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User? @relation("CoupleUserB", fields: [userBId], references: [id], onDelete: SetNull)
+
+  invites      CoupleInvite[]
+  goals        Goal[]
+  challenges   Challenge[]
+  checkIns     DailyCheckIn[]
+  promises     Promise[]
+  messages     Message[]
+  letters      OpenWhenLetter[]
+  memories     Memory[]
+  coupleScores CoupleScore[]
+  celebrations Celebration[]
+
+  @@index([userAId, status])
+  @@index([userBId, status])
+  @@map("couple_relationships")
+}
+
+model CoupleInvite {
+  id       String       @id @default(uuid()) @db.Uuid
+  coupleId String       @db.Uuid
+  senderId String       @db.Uuid
+  code     String       @unique
+  status   InviteStatus @default(PENDING)
+
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  couple CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  sender User               @relation("InviteSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([code, status])
+  @@map("couple_invites")
+}
+
+// ─── Tracking (source-of-truth logs) ────────────────────────────────────────
+
+model Habit {
+  id      String @id @default(uuid()) @db.Uuid
+  ownerId String @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  title         String
+  icon          String @default("sparkle")
+  colour        String @default("lilac")
+  frequencyRule String @default("DAILY") // DAILY | WEEKLY:MO,TU,...
+  targetPerDay  Int    @default(1)
+
+  active    Boolean   @default(true)
+  archivedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  completions HabitCompletion[]
+
+  @@index([ownerId, active])
+  @@map("habits")
+}
+
+model HabitCompletion {
+  id      String @id @default(uuid()) @db.Uuid
+  habitId String @db.Uuid
+  userId  String @db.Uuid
+
+  completedAt DateTime @default(now())
+  localDate   String   @db.VarChar(10)
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, localDate])
+  @@index([habitId, localDate])
+  @@map("habit_completions")
+}
+
+model WaterEntry {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @db.Uuid
+  amountMl Int
+
+  loggedAt  DateTime @default(now())
+  localDate String   @db.VarChar(10)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, localDate])
+  @@index([userId, loggedAt])
+  @@map("water_entries")
+}
+
+model MealEntry {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  mealType    MealType
+  description String
+  feelsGood   Boolean  @default(true)
+
+  loggedAt  DateTime @default(now())
+  localDate String   @db.VarChar(10)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, localDate])
+  @@index([userId, loggedAt])
+  @@map("meal_entries")
+}
+
+model ActivityEntry {
+  id              String @id @default(uuid()) @db.Uuid
+  userId          String @db.Uuid
+  activityType    String
+  durationMinutes Int
+  intensity       Int    @default(2) // 1 gentle · 2 steady · 3 strong
+  note            String?
+
+  loggedAt  DateTime @default(now())
+  localDate String   @db.VarChar(10)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, localDate])
+  @@index([userId, loggedAt])
+  @@map("activity_entries")
+}
+
+model MoodEntry {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  moodValue   MoodType
+  stressValue Int      @default(3) // 1 calm … 5 overwhelmed
+  note        String?
+
+  /// Per-entry consent. PRIVATE by default — never shared implicitly.
+  shareMode ShareMode @default(PRIVATE)
+
+  loggedAt  DateTime @default(now())
+  localDate String   @db.VarChar(10)
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  journalEntries JournalEntry[]
+
+  @@index([userId, localDate])
+  @@index([userId, loggedAt])
+  @@map("mood_entries")
+}
+
+model JournalEntry {
+  id      String  @id @default(uuid()) @db.Uuid
+  userId  String  @db.Uuid
+  title   String?
+  content String
+  prompt  String?
+
+  /// Journals are private unless the author explicitly shares that entry.
+  isShared Boolean @default(false)
+
+  moodEntryId String? @db.Uuid
+
+  localDate String    @db.VarChar(10)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moodEntry MoodEntry? @relation(fields: [moodEntryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, localDate])
+  @@map("journal_entries")
+}
+
+// ─── Goals ──────────────────────────────────────────────────────────────────
+
+model Goal {
+  id        String        @id @default(uuid()) @db.Uuid
+  ownerType GoalOwnerType
+  goalType  GoalType
+  coupleId  String?       @db.Uuid
+  creatorId String        @db.Uuid
+
+  title       String
+  description String?
+  category    GoalCategory
+  emoji       String       @default("✨")
+
+  targetValue  Float
+  currentValue Float  @default(0)
+  unit         String @default("times")
+
+  deadline       DateTime?
+  recurrenceRule String?
+  progressMode   ProgressMode @default(MANUAL)
+  status         GoalStatus   @default(ACTIVE)
+  themeId        String?
+
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  couple  CoupleRelationship? @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  creator User                @relation("GoalCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  participants  GoalParticipant[]
+  contributions GoalContribution[]
+  milestones    GoalMilestone[]
+  celebrations  Celebration[]
+
+  @@index([creatorId, status])
+  @@index([coupleId, status])
+  @@map("goals")
+}
+
+model GoalParticipant {
+  id     String @id @default(uuid()) @db.Uuid
+  goalId String @db.Uuid
+  userId String @db.Uuid
+
+  role             ParticipantRole  @default(OWNER)
+  acceptanceStatus AcceptanceStatus @default(ACCEPTED)
+  respondedAt      DateTime?
+  createdAt        DateTime         @default(now())
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, userId])
+  @@index([userId, acceptanceStatus])
+  @@map("goal_participants")
+}
+
+model GoalContribution {
+  id     String @id @default(uuid()) @db.Uuid
+  goalId String @db.Uuid
+  userId String @db.Uuid
+
+  value Float
+  /// MANUAL | WATER | ACTIVITY | HABIT | MEAL | CHECK_IN — lets a goal link to a
+  /// tracked event without exposing any unrelated private data.
+  sourceType String  @default("MANUAL")
+  sourceId   String? @db.Uuid
+  note       String?
+
+  contributedAt DateTime @default(now())
+  localDate     String   @db.VarChar(10)
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([goalId, userId])
+  @@index([goalId, contributedAt])
+  @@unique([goalId, sourceType, sourceId])
+  @@map("goal_contributions")
+}
+
+model GoalMilestone {
+  id     String @id @default(uuid()) @db.Uuid
+  goalId String @db.Uuid
+
+  label       String
+  thresholdPct Int
+  reachedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([goalId, thresholdPct])
+  @@map("goal_milestones")
+}
+
+// ─── Challenges, check-ins, promises ────────────────────────────────────────
+
+model Challenge {
+  id       String @id @default(uuid()) @db.Uuid
+  coupleId String @db.Uuid
+
+  title       String
+  description String?
+  emoji       String  @default("🔥")
+
+  startAt DateTime
+  endAt   DateTime
+
+  /// e.g. "DAILY_CHECK_IN:7" or "HABIT_COMPLETIONS:20"
+  targetRule String
+  targetValue Int    @default(7)
+  progressA   Int    @default(0)
+  progressB   Int    @default(0)
+
+  status ChallengeStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  couple       CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  celebrations Celebration[]
+
+  @@index([coupleId, status])
+  @@map("challenges")
+}
+
+model DailyCheckIn {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @db.Uuid
+  coupleId String @db.Uuid
+
+  localDate String        @db.VarChar(10)
+  status    CheckInStatus @default(DONE)
+  note      String?
+
+  createdAt DateTime @default(now())
+
+  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  couple CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, localDate])
+  @@index([coupleId, localDate])
+  @@map("daily_checkins")
+}
+
+model Promise {
+  id        String @id @default(uuid()) @db.Uuid
+  coupleId  String @db.Uuid
+  creatorId String @db.Uuid
+
+  title       String
+  promiseText String
+  emoji       String @default("🤍")
+
+  status PromiseStatus @default(PROPOSED)
+
+  /// Both partners must accept independently — one user can never accept for both.
+  acceptedByUserAAt DateTime?
+  acceptedByUserBAt DateTime?
+
+  trackingRule String?
+  completedAt  DateTime?
+  archivedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  couple       CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  creator      User               @relation("PromiseCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  celebrations Celebration[]
+
+  @@index([coupleId, status])
+  @@map("promises")
+}
+
+// ─── Messages & letters ─────────────────────────────────────────────────────
+
+model Message {
+  id          String @id @default(uuid()) @db.Uuid
+  coupleId    String @db.Uuid
+  senderId    String @db.Uuid
+  recipientId String @db.Uuid
+
+  body        String
+  messageType MessageType @default(NOTE)
+  /// Key into the cute full-screen background presets.
+  background  String      @default("sunrise")
+
+  scheduledFor DateTime?
+  deliveredAt  DateTime?
+  openedAt     DateTime?
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  couple    CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  sender    User               @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User               @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  reactions MessageReaction[]
+
+  @@index([coupleId, createdAt])
+  @@index([recipientId, deliveredAt])
+  @@index([scheduledFor, deliveredAt])
+  @@map("messages")
+}
+
+model MessageReaction {
+  id        String @id @default(uuid()) @db.Uuid
+  messageId String @db.Uuid
+  userId    String @db.Uuid
+  reaction  String
+
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_reactions")
+}
+
+model OpenWhenLetter {
+  id          String @id @default(uuid()) @db.Uuid
+  coupleId    String @db.Uuid
+  senderId    String @db.Uuid
+  recipientId String @db.Uuid
+
+  triggerLabel String
+  title        String
+  body         String
+  background   String @default("dusk")
+
+  status   LetterStatus @default(SEALED)
+  openedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  couple    CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  sender    User               @relation("LetterSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User               @relation("LetterRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId, status])
+  @@map("open_when_letters")
+}
+
+// ─── Memories ───────────────────────────────────────────────────────────────
+
+model Memory {
+  id        String @id @default(uuid()) @db.Uuid
+  coupleId  String @db.Uuid
+  creatorId String @db.Uuid
+
+  caption    String?
+  memoryDate DateTime
+
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  couple  CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  creator User               @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  media MemoryMedia[]
+
+  @@index([coupleId, memoryDate])
+  @@map("memories")
+}
+
+model MemoryMedia {
+  id       String @id @default(uuid()) @db.Uuid
+  memoryId String @db.Uuid
+
+  storageKey String
+  mediaType  String @default("image")
+  sortOrder  Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  memory Memory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@index([memoryId, sortOrder])
+  @@map("memory_media")
+}
+
+// ─── Derived data (recomputable from the logs above) ────────────────────────
+
+model DailyScore {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  localDate String @db.VarChar(10)
+
+  score         Int
+  componentJson Json
+  calculatedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, localDate])
+  @@index([userId, localDate])
+  @@map("daily_scores")
+}
+
+model CoupleScore {
+  id        String @id @default(uuid()) @db.Uuid
+  coupleId  String @db.Uuid
+  localDate String @db.VarChar(10)
+
+  score         Int
+  componentJson Json
+  calculatedAt  DateTime @default(now())
+
+  couple CoupleRelationship @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+
+  @@unique([coupleId, localDate])
+  @@index([coupleId, localDate])
+  @@map("couple_scores")
+}
+
+model AiInsight {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  insightType  InsightType
+  title        String
+  body         String
+  evidenceJson Json
+  confidence   String      @default("high")
+
+  generatedAt DateTime  @default(now())
+  dismissedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, generatedAt])
+  @@map("ai_insights")
+}
+
+model Celebration {
+  id          String          @id @default(uuid()) @db.Uuid
+  coupleId    String?         @db.Uuid
+  goalId      String?         @db.Uuid
+  challengeId String?         @db.Uuid
+  promiseId   String?         @db.Uuid
+  kind        CelebrationKind
+
+  title String
+  body  String
+  emoji String @default("🎉")
+
+  createdAt DateTime @default(now())
+
+  couple    CoupleRelationship? @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  goal      Goal?               @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  challenge Challenge?          @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  promise   Promise?            @relation(fields: [promiseId], references: [id], onDelete: Cascade)
+
+  seenBy CelebrationSeen[]
+
+  @@index([coupleId, createdAt])
+  @@map("celebrations")
+}
+
+model CelebrationSeen {
+  id            String @id @default(uuid()) @db.Uuid
+  celebrationId String @db.Uuid
+  userId        String @db.Uuid
+
+  seenAt DateTime @default(now())
+
+  celebration Celebration @relation(fields: [celebrationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([celebrationId, userId])
+  @@map("celebration_seen")
+}
+
+// ─── Privacy ────────────────────────────────────────────────────────────────
+
+model SharingPreference {
+  id       String        @id @default(uuid()) @db.Uuid
+  userId   String        @db.Uuid
+  category ShareCategory
+
+  shareEnabled Boolean          @default(false)
+  detailLevel  ShareDetailLevel @default(NONE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("sharing_preferences")
+}
+
+model AuditEvent {
+  id           String  @id @default(uuid()) @db.Uuid
+  actorId      String? @db.Uuid
+  eventType    String
+  resourceType String
+  resourceId   String?
+  metadataJson Json?
+
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@map("audit_events")
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+model NotificationPreference {
+  id       String               @id @default(uuid()) @db.Uuid
+  userId   String               @db.Uuid
+  category NotificationCategory
+
+  enabled    Boolean @default(true)
+  quietStart String? @db.VarChar(5) // "22:00" local
+  quietEnd   String? @db.VarChar(5) // "07:30" local
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
+}
+
+model DeviceSubscription {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  provider String @default("webpush")
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  deviceMetadata Json?
+  active         Boolean  @default(true)
+  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deliveries NotificationDelivery[]
+
+  @@index([userId, active])
+  @@map("device_subscriptions")
+}
+
+model ScheduledNotification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  relatedResourceType String
+  relatedResourceId   String? @db.Uuid
+
+  notificationType NotificationType
+  category         NotificationCategory
+  scheduledFor     DateTime
+  payloadTemplate  Json
+
+  /// Guards against duplicate sends when a tick overlaps — delivery is idempotent.
+  dedupeKey String          @unique
+  status    ScheduledStatus @default(PENDING)
+  sentAt    DateTime?
+  attempts  Int             @default(0)
+  lastError String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  deliveries NotificationDelivery[]
+
+  @@index([status, scheduledFor])
+  @@index([userId, status])
+  @@map("scheduled_notifications")
+}
+
+model NotificationDelivery {
+  id                      String  @id @default(uuid()) @db.Uuid
+  scheduledNotificationId String? @db.Uuid
+  subscriptionId          String? @db.Uuid
+  userId                  String  @db.Uuid
+
+  provider String         @default("webpush")
+  status   DeliveryStatus @default(QUEUED)
+  sentAt   DateTime?
+  deliveredAt DateTime?
+  error    String?
+
+  createdAt DateTime @default(now())
+
+  scheduledNotification ScheduledNotification? @relation(fields: [scheduledNotificationId], references: [id], onDelete: Cascade)
+  subscription          DeviceSubscription?    @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notification_deliveries")
+}

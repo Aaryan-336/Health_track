@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FBE9B2"/>
+      <stop offset="55%" stop-color="#FBD6E4"/>
+      <stop offset="100%" stop-color="#DFDBFA"/>
+    </linearGradient>
+    <linearGradient id="petal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#bg)"/>
+  <g transform="translate(256 254)">
+    <g fill="url(#petal)">
+      <ellipse cx="0" cy="-74" rx="52" ry="70"/>
+      <ellipse cx="0" cy="-74" rx="52" ry="70" transform="rotate(72)"/>
+      <ellipse cx="0" cy="-74" rx="52" ry="70" transform="rotate(144)"/>
+      <ellipse cx="0" cy="-74" rx="52" ry="70" transform="rotate(216)"/>
+      <ellipse cx="0" cy="-74" rx="52" ry="70" transform="rotate(288)"/>
+    </g>
+    <path d="M0 38c-30-19-52-38-52-61a26 26 0 0 1 52-9 26 26 0 0 1 52 9c0 23-22 42-52 61Z" fill="#F49AC1"/>
+  </g>
+</svg>
