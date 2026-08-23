@@ -10,7 +10,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Pooled connection (PgBouncer) for the app — serverless functions open many
+  // short-lived clients, so they must not hold direct Postgres connections.
+  url       = env("DATABASE_URL")
+  // Unpooled connection, used only by `prisma migrate`, which needs a session.
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
@@ -243,36 +247,36 @@ model User {
 
   healthProfile HealthProfile?
 
-  couplesAsA CoupleRelationship[] @relation("CoupleUserA")
-  couplesAsB CoupleRelationship[] @relation("CoupleUserB")
-  sentInvites CoupleInvite[]      @relation("InviteSender")
+  couplesAsA  CoupleRelationship[] @relation("CoupleUserA")
+  couplesAsB  CoupleRelationship[] @relation("CoupleUserB")
+  sentInvites CoupleInvite[]       @relation("InviteSender")
 
-  habits            Habit[]
-  habitCompletions  HabitCompletion[]
-  waterEntries      WaterEntry[]
-  mealEntries       MealEntry[]
-  activityEntries   ActivityEntry[]
-  moodEntries       MoodEntry[]
-  journalEntries    JournalEntry[]
+  habits           Habit[]
+  habitCompletions HabitCompletion[]
+  waterEntries     WaterEntry[]
+  mealEntries      MealEntry[]
+  activityEntries  ActivityEntry[]
+  moodEntries      MoodEntry[]
+  journalEntries   JournalEntry[]
 
   createdGoals       Goal[]             @relation("GoalCreator")
   goalParticipations GoalParticipant[]
   goalContributions  GoalContribution[]
 
   dailyCheckIns   DailyCheckIn[]
-  createdPromises Promise[]        @relation("PromiseCreator")
+  createdPromises Promise[]      @relation("PromiseCreator")
 
-  sentMessages     Message[] @relation("MessageSender")
-  receivedMessages Message[] @relation("MessageRecipient")
+  sentMessages     Message[]         @relation("MessageSender")
+  receivedMessages Message[]         @relation("MessageRecipient")
   reactions        MessageReaction[]
 
   sentLetters     OpenWhenLetter[] @relation("LetterSender")
   receivedLetters OpenWhenLetter[] @relation("LetterRecipient")
 
-  memories      Memory[]
-  dailyScores   DailyScore[]
-  aiInsights    AiInsight[]
-  celebrations  CelebrationSeen[]
+  memories     Memory[]
+  dailyScores  DailyScore[]
+  aiInsights   AiInsight[]
+  celebrations CelebrationSeen[]
 
   sharingPreferences      SharingPreference[]
   notificationPreferences NotificationPreference[]
@@ -291,11 +295,11 @@ model HealthProfile {
   userId String @unique @db.Uuid
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  dailyWaterGoalMl    Int @default(2000)
-  dailyMealGoal       Int @default(3)
-  weeklyWorkoutGoal   Int @default(4)
-  dailyActivityGoal   Int @default(30) // minutes
-  glassSizeMl         Int @default(250)
+  dailyWaterGoalMl  Int @default(2000)
+  dailyMealGoal     Int @default(3)
+  weeklyWorkoutGoal Int @default(4)
+  dailyActivityGoal Int @default(30) // minutes
+  glassSizeMl       Int @default(250)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -369,10 +373,10 @@ model Habit {
   frequencyRule String @default("DAILY") // DAILY | WEEKLY:MO,TU,...
   targetPerDay  Int    @default(1)
 
-  active    Boolean   @default(true)
+  active     Boolean   @default(true)
   archivedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   completions HabitCompletion[]
 
@@ -429,11 +433,11 @@ model MealEntry {
 }
 
 model ActivityEntry {
-  id              String @id @default(uuid()) @db.Uuid
-  userId          String @db.Uuid
+  id              String  @id @default(uuid()) @db.Uuid
+  userId          String  @db.Uuid
   activityType    String
   durationMinutes Int
-  intensity       Int    @default(2) // 1 gentle · 2 steady · 3 strong
+  intensity       Int     @default(2) // 1 gentle · 2 steady · 3 strong
   note            String?
 
   loggedAt  DateTime @default(now())
@@ -556,7 +560,7 @@ model GoalContribution {
   goalId String @db.Uuid
   userId String @db.Uuid
 
-  value Float
+  value      Float
   /// MANUAL | WATER | ACTIVITY | HABIT | MEAL | CHECK_IN — lets a goal link to a
   /// tracked event without exposing any unrelated private data.
   sourceType String  @default("MANUAL")
@@ -569,9 +573,9 @@ model GoalContribution {
   goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([goalId, sourceType, sourceId])
   @@index([goalId, userId])
   @@index([goalId, contributedAt])
-  @@unique([goalId, sourceType, sourceId])
   @@map("goal_contributions")
 }
 
@@ -579,10 +583,10 @@ model GoalMilestone {
   id     String @id @default(uuid()) @db.Uuid
   goalId String @db.Uuid
 
-  label       String
+  label        String
   thresholdPct Int
-  reachedAt   DateTime?
-  createdAt   DateTime  @default(now())
+  reachedAt    DateTime?
+  createdAt    DateTime  @default(now())
 
   goal Goal @relation(fields: [goalId], references: [id], onDelete: Cascade)
 
@@ -604,7 +608,7 @@ model Challenge {
   endAt   DateTime
 
   /// e.g. "DAILY_CHECK_IN:7" or "HABIT_COMPLETIONS:20"
-  targetRule String
+  targetRule  String
   targetValue Int    @default(7)
   progressA   Int    @default(0)
   progressB   Int    @default(0)
@@ -986,11 +990,11 @@ model NotificationDelivery {
   subscriptionId          String? @db.Uuid
   userId                  String  @db.Uuid
 
-  provider String         @default("webpush")
-  status   DeliveryStatus @default(QUEUED)
-  sentAt   DateTime?
+  provider    String         @default("webpush")
+  status      DeliveryStatus @default(QUEUED)
+  sentAt      DateTime?
   deliveredAt DateTime?
-  error    String?
+  error       String?
 
   createdAt DateTime @default(now())
 
@@ -1000,4 +1004,19 @@ model NotificationDelivery {
 
   @@index([userId, createdAt])
   @@map("notification_deliveries")
+}
+
+/// Binary objects (memory photos) held in Postgres.
+///
+/// The app is designed to run on hosts with no persistent disk, so uploads go
+/// here rather than to the filesystem. Rows are addressed by the same opaque
+/// key the local driver mints, so nothing above the storage interface changes.
+model StorageObject {
+  key         String   @id
+  contentType String
+  size        Int
+  bytes       Bytes
+  createdAt   DateTime @default(now())
+
+  @@map("storage_objects")
 }

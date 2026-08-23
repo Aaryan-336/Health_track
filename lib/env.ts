@@ -6,13 +6,16 @@ import { z } from 'zod';
  */
 const serverSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  DIRECT_URL: z.string().default(''),
   AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 characters'),
   VAPID_SUBJECT: z.string().min(1).default('mailto:hello@healthtrack.app'),
   VAPID_PUBLIC_KEY: z.string().default(''),
   VAPID_PRIVATE_KEY: z.string().default(''),
   CRON_SECRET: z.string().min(1).default('dev-cron-secret'),
-  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
-  STORAGE_BUCKET: z.string().default('health-track-media'),
+  STORAGE_DRIVER: z.enum(['local', 'postgres', 'supabase']).default('local'),
+  STORAGE_BUCKET: z.string().default('memories'),
+  SUPABASE_URL: z.string().default(''),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
   AI_API_KEY: z.string().default(''),
   AI_MODEL: z.string().default('llama-3.3-70b-versatile'),
 });
@@ -43,3 +46,7 @@ export const pushConfigured = () =>
   Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 
 export const aiConfigured = () => Boolean(process.env.AI_API_KEY);
+
+export const storageConfigured = () =>
+  process.env.STORAGE_DRIVER !== 'supabase' ||
+  Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);

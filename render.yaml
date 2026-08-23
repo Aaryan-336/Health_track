@@ -1,0 +1,49 @@
+# Optional: run the notification dispatcher on Render instead of GitHub Actions.
+#
+# Neither service type below is on Render's free tier — a free web service
+# sleeps after ~15 minutes of inactivity, which would stop the ticks. Use this
+# only if you would rather pay Render than rely on the scheduled GitHub Action
+# in .github/workflows/notification-tick.yml.
+#
+# Pick ONE of the two services and delete the other.
+services:
+  # A. Long-running worker. Ticks in-process every 60 seconds.
+  - type: worker
+    name: bloom-notification-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npx prisma generate
+    startCommand: npm run worker
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: TICK_INTERVAL_SECONDS
+        value: '60'
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
+
+  # B. Cron job. Pokes the app's tick endpoint every 15 minutes instead.
+  - type: cron
+    name: bloom-notification-tick
+    runtime: node
+    plan: starter
+    schedule: '*/15 * * * *'
+    buildCommand: npm ci
+    startCommand: >-
+      curl -sS -f -X POST "$APP_URL/api/v1/cron/tick"
+      -H "Authorization: Bearer $CRON_SECRET"
+    envVars:
+      - key: APP_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false

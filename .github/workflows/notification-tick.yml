@@ -1,0 +1,38 @@
+# Drives the notification dispatcher on a schedule, for free.
+#
+# It calls the same endpoint the standalone worker would run in-process, so
+# scheduled notes and reminders go out without a long-running service. The tick
+# is idempotent — an overlapping run cannot send anything twice.
+#
+# Requires two repository secrets (Settings → Secrets and variables → Actions):
+#   APP_URL      https://your-app.vercel.app
+#   CRON_SECRET  the same value as the app's CRON_SECRET
+name: Notification tick
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub queues scheduled runs, so treat this as
+    # "roughly every 15 minutes" rather than a hard guarantee.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: notification-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the dispatcher
+        run: |
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            -X POST "${APP_URL%/}/api/v1/cron/tick" \
+            -H "Authorization: Bearer ${CRON_SECRET}")
+          echo "HTTP $code"
+          cat response.json
+          test "$code" = "200"
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
