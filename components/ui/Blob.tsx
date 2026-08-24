@@ -107,25 +107,40 @@ export function HighlightBlob({
   );
 }
 
-/** Decorative background wash — kept subtle so it never competes with content. */
+/**
+ * Decorative background wash.
+ *
+ * Fixed to the viewport rather than the content column. Clipped to the column
+ * it showed its own straight edges — barely visible on the light canvas, but
+ * obvious in dark mode, where a soft wash against near-black reads as a grey
+ * rectangle pasted over the page. Clipping at the screen edge instead means the
+ * blur always runs off the side of the display, so there is no seam to see.
+ *
+ * The tones are pulled back in dark mode: the same opacity that reads as a hint
+ * of warmth on cream reads as haze on espresso.
+ */
 export function BlobBackdrop({ className }: { className?: string }) {
   const reduce = useReducedMotion();
+
   return (
-    <div aria-hidden className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)}>
+    <div
+      aria-hidden
+      className={cn('pointer-events-none fixed inset-0 overflow-hidden', className)}
+    >
       <motion.div
         animate={reduce ? undefined : { x: [0, 18, 0], y: [0, -14, 0] }}
         transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -left-16 -top-20 h-56 w-56 rounded-blob bg-blush/25 blur-3xl"
+        className="absolute -left-32 -top-32 h-[26rem] w-[26rem] rounded-blob bg-blush/25 blur-[80px] dark:bg-blush/[0.13]"
       />
       <motion.div
         animate={reduce ? undefined : { x: [0, -20, 0], y: [0, 16, 0] }}
         transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -right-20 top-24 h-64 w-64 rounded-blob bg-lilac/25 blur-3xl"
+        className="absolute -right-36 top-[14%] h-[28rem] w-[28rem] rounded-blob bg-lilac/25 blur-[80px] dark:bg-lilac/[0.12]"
       />
       <motion.div
         animate={reduce ? undefined : { x: [0, 14, 0], y: [0, 20, 0] }}
         transition={{ duration: 30, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute -bottom-24 left-10 h-56 w-56 rounded-blob bg-honey/20 blur-3xl"
+        className="absolute -bottom-40 left-[8%] h-[26rem] w-[26rem] rounded-blob bg-honey/20 blur-[80px] dark:bg-honey/[0.09]"
       />
     </div>
   );
