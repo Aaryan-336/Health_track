@@ -14,14 +14,17 @@ so there is no separate backend to deploy. Everything below fits on free tiers.
 ## 1 · Supabase (database + photo storage)
 
 1. Create a project at <https://supabase.com/dashboard>. Save the database
-   password it shows you — it appears once.
+   password it shows you — it appears once. YdKg1FLIWsm3w56Z
 2. **Project settings → Database → Connection string → URI.** You need two
-   forms of it:
+   forms of it: 
    - **Pooled** (port `6543`, "Transaction" mode) → this becomes `DATABASE_URL`.
-     Append `?pgbouncer=true&connection_limit=1` — serverless functions open a
-     lot of short-lived clients and will exhaust the pool without it.
+     Append `?pgbouncer=true&connection_limit=1`. The app adds both parameters
+     itself if they are missing (see `poolAwareUrl` in `lib/db/client.ts`) —
+     without them, Postgres rejects every query after the first with
+     `42P05 prepared statement "s1" already exists` — but setting them
+     explicitly keeps the URL honest about what it is. postgresql://postgres.rvopimvjepjudhfyejlz:YdKg1FLIWsm3w56Z@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
    - **Direct** (port `5432`) → this becomes `DIRECT_URL`. Migrations need a
-     real session and cannot run through the pooler.
+     real session and cannot run through the pooler. postgresql://postgres:YdKg1FLIWsm3w56Z@db.rvopimvjepjudhfyejlz.supabase.co:5432/postgres
 3. **Storage → New bucket** → name it `memories` and leave **Public** *off*.
    Photos are couple-private and are served through the app's authorised
    `/api/v1/media/[id]` route, never from a public URL.
@@ -29,6 +32,10 @@ so there is no separate backend to deploy. Everything below fits on free tiers.
    the **`service_role`** key (`SUPABASE_SERVICE_ROLE_KEY`). The service-role
    key bypasses row-level security — it belongs only in server environment
    variables, never in the browser and never in the repo.
+
+   Service role: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2b3BpbXZqZXBqdWRoZnllamx6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzU1MzkyNSwiZXhwIjoyMTAzMTI5OTI1fQ.o8Bbeuhg7OYGUP8Y4Gi6nvghGDFYtHEAPFjN0Lv4pDw
+
+   Project url: https://rvopimvjepjudhfyejlz.supabase.co
 
 ## 2 · Generate the secrets
 
