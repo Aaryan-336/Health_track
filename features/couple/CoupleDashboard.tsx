@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Avatar } from '@/components/ui/Avatar';
-import { BlobBackdrop } from '@/components/ui/Blob';
 import { Button } from '@/components/ui/Button';
 import { Card, CardLabel, SectionHeader } from '@/components/ui/Card';
 import { Empty, Pill } from '@/components/ui/Empty';
@@ -66,7 +65,6 @@ function ActiveDashboard({
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="relative">
-      <BlobBackdrop className="-z-10" />
 
       {/* ── Header ───────────────────────────────────────────────────────── */}
       <motion.header variants={item} className="mb-6">

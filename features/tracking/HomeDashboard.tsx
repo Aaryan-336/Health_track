@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 
 import { Avatar } from '@/components/ui/Avatar';
-import { BlobBackdrop, HighlightBlob } from '@/components/ui/Blob';
+import { HighlightBlob } from '@/components/ui/Blob';
 import { Card, CardLabel, SectionHeader } from '@/components/ui/Card';
 import { Empty, Pill } from '@/components/ui/Empty';
 import { ProgressBar, ProgressRing } from '@/components/ui/Progress';
@@ -40,7 +40,6 @@ export function HomeDashboard({
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="relative">
-      <BlobBackdrop className="-z-10" />
 
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <motion.header variants={item} className="mb-6 flex items-center justify-between gap-3">
@@ -64,7 +63,7 @@ export function HomeDashboard({
 
       {/* ── Health score ─────────────────────────────────────────────────── */}
       <motion.section variants={item} className="mb-7">
-        <Card tone="plain" className="grain overflow-visible pb-6 pt-7">
+        <Card tone="accent" className="grain overflow-visible pb-6 pt-7">
           <p className="text-center text-[0.9rem] font-bold text-muted">
             {firstName}, how are you doing today?
           </p>

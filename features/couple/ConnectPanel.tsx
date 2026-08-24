@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { BlobBackdrop } from '@/components/ui/Blob';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Field';
@@ -58,7 +57,6 @@ export function ConnectPanel({ inviteCode }: { inviteCode: string | null }) {
 
   return (
     <div className="relative">
-      <BlobBackdrop className="-z-10" />
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}
