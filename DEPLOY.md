@@ -18,11 +18,12 @@ so there is no separate backend to deploy. Everything below fits on free tiers.
 2. **Project settings → Database → Connection string → URI.** You need two
    forms of it: 
    - **Pooled** (port `6543`, "Transaction" mode) → this becomes `DATABASE_URL`.
-     Append `?pgbouncer=true&connection_limit=1`. The app adds both parameters
-     itself if they are missing (see `poolAwareUrl` in `lib/db/client.ts`) —
-     without them, Postgres rejects every query after the first with
-     `42P05 prepared statement "s1" already exists` — but setting them
-     explicitly keeps the URL honest about what it is. postgresql://postgres.rvopimvjepjudhfyejlz:YdKg1FLIWsm3w56Z@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+     Paste it as-is: `poolAwareUrl` in `lib/db/client.ts` adds the parameters a
+     pooled connection needs. Without `pgbouncer=true` Postgres rejects every
+     query after the first with `42P05 prepared statement "s1" already exists`;
+     with too small a `connection_limit` the dashboard's parallel queries queue
+     up and fail with `P2024`. Do not set `connection_limit=1` here — that is
+     the advice for a *direct* serverless connection, not a pooled one. postgresql://postgres.rvopimvjepjudhfyejlz:YdKg1FLIWsm3w56Z@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
    - **Direct** (port `5432`) → this becomes `DIRECT_URL`. Migrations need a
      real session and cannot run through the pooler. postgresql://postgres:YdKg1FLIWsm3w56Z@db.rvopimvjepjudhfyejlz.supabase.co:5432/postgres
 3. **Storage → New bucket** → name it `memories` and leave **Public** *off*.
@@ -140,8 +141,13 @@ screen — Safari will not offer them to a normal tab.
 
 - **`prisma migrate deploy` fails on the pooled URL.** That is what `DIRECT_URL`
   is for; check it points at port 5432.
-- **"Too many connections".** `connection_limit=1` is missing from the pooled
-  `DATABASE_URL`.
+- **`P2024 Timed out fetching a new connection`.** The pool is too small for the
+  dashboard's parallel queries, or the database is far from the functions. Check
+  `connection_limit` is not pinned low in `DATABASE_URL`, and that the Vercel
+  function region matches the Supabase region.
+- **Everything is slow.** Vercel → Settings → Functions → Function Region should
+  be the same region as your Supabase project. A dashboard load makes a dozen
+  round trips, so a cross-continent hop is felt immediately.
 - **Push works on desktop but not iPhone.** The app has to be launched from the
   home-screen icon, not a Safari tab.
 - **Photos upload but do not display.** `STORAGE_DRIVER` is not `supabase`, the

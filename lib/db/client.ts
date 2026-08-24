@@ -18,6 +18,16 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
  * towards applying it: doing so on a session-mode pooler costs only prepared
  * statements, while missing it on a transaction-mode one breaks every request.
  */
+
+/**
+ * The home dashboard fans out more than a dozen queries at once. Prisma's pool
+ * has to be wide enough to actually run them in parallel — with a pool of one
+ * they queue, and on a database in another region the tail of that queue hits
+ * `P2024 Timed out fetching a new connection`. The pooler upstream is what
+ * protects Postgres from too many connections, not this number.
+ */
+const MIN_POOL_SIZE = 10;
+const POOL_TIMEOUT_SECONDS = 20;
 export function poolAwareUrl(raw: string | undefined): string | undefined {
   if (!raw) return raw;
 
@@ -32,8 +42,21 @@ export function poolAwareUrl(raw: string | undefined): string | undefined {
   if (!pooled) return raw;
 
   if (!url.searchParams.has('pgbouncer')) url.searchParams.set('pgbouncer', 'true');
-  // One connection per invocation: the pooler is doing the pooling now.
-  if (!url.searchParams.has('connection_limit')) url.searchParams.set('connection_limit', '1');
+
+  const configured = Number(url.searchParams.get('connection_limit'));
+  if (!Number.isFinite(configured) || configured < MIN_POOL_SIZE) {
+    if (Number.isFinite(configured) && configured > 0) {
+      console.warn(
+        `[db] connection_limit=${configured} is too small for this app's parallel ` +
+          `queries — using ${MIN_POOL_SIZE} instead.`,
+      );
+    }
+    url.searchParams.set('connection_limit', String(MIN_POOL_SIZE));
+  }
+
+  if (!url.searchParams.has('pool_timeout')) {
+    url.searchParams.set('pool_timeout', String(POOL_TIMEOUT_SECONDS));
+  }
 
   return url.toString();
 }
