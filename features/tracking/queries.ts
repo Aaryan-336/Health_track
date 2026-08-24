@@ -2,7 +2,7 @@ import type { User } from '@prisma/client';
 
 import { prisma } from '@/lib/db/client';
 import { lastNLocalDates, todayLocalDate, weekOf } from '@/lib/dates';
-import { computeHealthScore, isHabitScheduled } from '@/lib/scores/health';
+import { isHabitScheduled, scoreFromInputs } from '@/lib/scores/health';
 import { computeActivityStreak } from '@/lib/scores/streaks';
 import { goalPercent } from '@/features/goals/progress';
 import { getCoupleContext } from '@/lib/permissions';
@@ -16,8 +16,10 @@ export async function getHomeData(user: User) {
   const today = todayLocalDate(user.timezone);
   const week = weekOf(today);
 
+  // Everything below is fetched exactly once. The score used to be computed by
+  // `computeHealthScore`, which loaded the same seven rows again — on a database
+  // in another region that doubling was plainly visible in the page's latency.
   const [
-    scoreResult,
     profile,
     waterAgg,
     habits,
@@ -31,7 +33,6 @@ export async function getHomeData(user: User) {
     scoreHistory,
     ctx,
   ] = await Promise.all([
-    computeHealthScore(prisma, user.id, today, user.timezone),
     prisma.healthProfile.findUnique({ where: { userId: user.id } }),
     prisma.waterEntry.aggregate({ where: { userId: user.id, localDate: today }, _sum: { amountMl: true } }),
     prisma.habit.findMany({ where: { ownerId: user.id, active: true }, orderBy: { createdAt: 'asc' } }),
@@ -67,6 +68,22 @@ export async function getHomeData(user: User) {
 
   const doneHabitIds = new Set(completions.map((c) => c.habitId));
   const scheduledHabits = habits.filter((h) => isHabitScheduled(h.frequencyRule, today));
+  const habitsDone = scheduledHabits.filter((h) => doneHabitIds.has(h.id)).length;
+
+  const scoreResult = scoreFromInputs(today, {
+    waterMl: waterAgg._sum.amountMl ?? 0,
+    activeMinutes: activityAgg._sum.durationMinutes ?? 0,
+    activitySessions: activityAgg._count,
+    meals,
+    latestMood: mood,
+    scheduledHabitCount: scheduledHabits.length,
+    habitsDone,
+    goals: {
+      waterMl: profile?.dailyWaterGoalMl ?? 2000,
+      meals: profile?.dailyMealGoal ?? 3,
+      activityMinutes: profile?.dailyActivityGoal ?? 30,
+    },
+  });
 
   // The partner card only ever contains what they explicitly chose to share.
   let partnerSnapshot: PartnerSnapshot | null = null;
@@ -98,7 +115,7 @@ export async function getHomeData(user: User) {
     },
     habits: {
       total: scheduledHabits.length,
-      done: scheduledHabits.filter((h) => doneHabitIds.has(h.id)).length,
+      done: habitsDone,
       items: scheduledHabits.slice(0, 5).map((h) => ({
         id: h.id,
         title: h.title,

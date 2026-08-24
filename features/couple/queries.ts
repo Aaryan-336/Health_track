@@ -30,7 +30,7 @@ export async function getCoupleDashboard(user: User) {
 
   const [score, sharedGoals, checkIns, challenge, latestMessage, promises, memories, letters, snapshot] =
     await Promise.all([
-      computeCoupleScore(prisma, ctx.couple.id, today, user.timezone),
+      computeCoupleScore(prisma, ctx.couple.id, today, user.timezone, ctx.couple),
       prisma.goal.findMany({
         where: { coupleId: ctx.couple.id, goalType: 'SHARED', status: 'ACTIVE', deletedAt: null },
         include: { milestones: { where: { reachedAt: null }, orderBy: { thresholdPct: 'asc' }, take: 1 } },

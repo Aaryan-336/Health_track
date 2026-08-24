@@ -1,3 +1,5 @@
+import type { CoupleRelationship } from '@prisma/client';
+
 import type { Tx } from '@/lib/db/client';
 import { endOfLocalDayUtc, startOfLocalDayUtc, type LocalDate } from '@/lib/dates';
 import { computeCoupleStreak } from './streaks';
@@ -33,8 +35,12 @@ export async function computeCoupleScore(
   coupleId: string,
   localDate: LocalDate,
   timezone: string,
+  /** Pass the relationship when the caller already has it — it saves a round
+   *  trip that would otherwise run before the parallel batch below. */
+  preloaded?: CoupleRelationship | null,
 ): Promise<CoupleScoreResult> {
-  const couple = await db.coupleRelationship.findUnique({ where: { id: coupleId } });
+  const couple =
+    preloaded ?? (await db.coupleRelationship.findUnique({ where: { id: coupleId } }));
   if (!couple) {
     return { localDate, score: null, components: [], streak: { current: 0, longest: 0, activeToday: false } };
   }

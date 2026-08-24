@@ -27,10 +27,27 @@ export type HealthScoreResult = {
   components: ScoreComponent[];
 };
 
+/**
+ * Everything the score is derived from. Stated explicitly so a caller that has
+ * already loaded a day — the home dashboard does — can score it without asking
+ * the database for the same seven rows a second time.
+ */
+export type HealthScoreInputs = {
+  waterMl: number;
+  activeMinutes: number;
+  activitySessions: number;
+  meals: number;
+  latestMood: { moodValue: string; stressValue: number } | null;
+  scheduledHabitCount: number;
+  habitsDone: number;
+  goals: { waterMl: number; meals: number; activityMinutes: number };
+};
+
 const WEIGHTS = { water: 25, movement: 20, habits: 20, nourishment: 15, mood: 20 } as const;
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
+/** Loads a day and scores it. Use `scoreFromInputs` if you already have the data. */
 export async function computeHealthScore(
   db: Tx,
   userId: string,
@@ -65,72 +82,91 @@ export async function computeHealthScore(
 
   void dayStart;
 
-  const waterGoal = profile?.dailyWaterGoalMl ?? 2000;
-  const mealGoal = profile?.dailyMealGoal ?? 3;
-  const activityGoal = profile?.dailyActivityGoal ?? 30;
-
-  const waterMl = water._sum.amountMl ?? 0;
-  const activeMinutes = activities._sum.durationMinutes ?? 0;
-
   const scheduledHabits = activeHabits.filter((h) => isHabitScheduled(h.frequencyRule, localDate));
   const completedHabitIds = new Set(completions.map((c) => c.habitId));
-  const habitsDone = scheduledHabits.filter((h) => completedHabitIds.has(h.id)).length;
 
-  const latestMood = moods[0];
+  return scoreFromInputs(localDate, {
+    waterMl: water._sum.amountMl ?? 0,
+    activeMinutes: activities._sum.durationMinutes ?? 0,
+    activitySessions: activities._count,
+    meals,
+    latestMood: moods[0] ?? null,
+    scheduledHabitCount: scheduledHabits.length,
+    habitsDone: scheduledHabits.filter((h) => completedHabitIds.has(h.id)).length,
+    goals: {
+      waterMl: profile?.dailyWaterGoalMl ?? 2000,
+      meals: profile?.dailyMealGoal ?? 3,
+      activityMinutes: profile?.dailyActivityGoal ?? 30,
+    },
+  });
+}
+
+/**
+ * The scoring rule itself — pure, so it is identical whoever loaded the data.
+ *
+ * A dimension you did not engage with at all is dropped and the remaining
+ * weights renormalised, rather than scored zero: missing data is not failure.
+ */
+export function scoreFromInputs(
+  localDate: LocalDate,
+  input: HealthScoreInputs,
+): HealthScoreResult {
+  const { goals } = input;
 
   const components: ScoreComponent[] = [
     {
       key: 'water',
       label: 'Water',
       weight: WEIGHTS.water,
-      ratio: clamp01(waterMl / Math.max(1, waterGoal)),
-      engaged: waterMl > 0,
-      detail: `${waterMl} / ${waterGoal} ml`,
+      ratio: clamp01(input.waterMl / Math.max(1, goals.waterMl)),
+      engaged: input.waterMl > 0,
+      detail: `${input.waterMl} / ${goals.waterMl} ml`,
     },
     {
       key: 'movement',
       label: 'Movement',
       weight: WEIGHTS.movement,
-      ratio: clamp01(activeMinutes / Math.max(1, activityGoal)),
-      engaged: activities._count > 0,
-      detail: `${activeMinutes} / ${activityGoal} min`,
+      ratio: clamp01(input.activeMinutes / Math.max(1, goals.activityMinutes)),
+      engaged: input.activitySessions > 0,
+      detail: `${input.activeMinutes} / ${goals.activityMinutes} min`,
     },
     {
       key: 'habits',
       label: 'Habits',
       weight: WEIGHTS.habits,
-      ratio: scheduledHabits.length ? clamp01(habitsDone / scheduledHabits.length) : 0,
-      engaged: scheduledHabits.length > 0,
-      detail: `${habitsDone} / ${scheduledHabits.length}`,
+      ratio: input.scheduledHabitCount
+        ? clamp01(input.habitsDone / input.scheduledHabitCount)
+        : 0,
+      engaged: input.scheduledHabitCount > 0,
+      detail: `${input.habitsDone} / ${input.scheduledHabitCount}`,
     },
     {
       key: 'nourishment',
       label: 'Meals',
       weight: WEIGHTS.nourishment,
-      ratio: clamp01(meals / Math.max(1, mealGoal)),
-      engaged: meals > 0,
-      detail: `${meals} / ${mealGoal}`,
+      ratio: clamp01(input.meals / Math.max(1, goals.meals)),
+      engaged: input.meals > 0,
+      detail: `${input.meals} / ${goals.meals}`,
     },
     {
       key: 'mood',
       label: 'Mood',
       weight: WEIGHTS.mood,
-      ratio: latestMood ? moodRatio(latestMood.moodValue, latestMood.stressValue) : 0,
-      engaged: Boolean(latestMood),
-      detail: latestMood ? prettyMood(latestMood.moodValue) : 'Not checked in',
+      ratio: input.latestMood
+        ? moodRatio(input.latestMood.moodValue, input.latestMood.stressValue)
+        : 0,
+      engaged: Boolean(input.latestMood),
+      detail: input.latestMood ? prettyMood(input.latestMood.moodValue) : 'Not checked in',
     },
   ];
 
   const engaged = components.filter((c) => c.engaged);
-  if (engaged.length === 0) {
-    return { localDate, score: null, components };
-  }
+  if (engaged.length === 0) return { localDate, score: null, components };
 
   const totalWeight = engaged.reduce((sum, c) => sum + c.weight, 0);
   const earned = engaged.reduce((sum, c) => sum + c.weight * c.ratio, 0);
-  const score = Math.round((earned / totalWeight) * 100);
 
-  return { localDate, score, components };
+  return { localDate, score: Math.round((earned / totalWeight) * 100), components };
 }
 
 /** Recomputes and persists the derived score. Safe to run repeatedly. */
